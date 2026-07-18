@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<title>Akilli Labirent Cozucu</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0f0f1a; color: #e0e0e0; font-family: 'Segoe UI', sans-serif; height: 100vh; display: flex; flex-direction: column; }
+
+  header { padding: 12px 20px; background: #1a1a2e; border-bottom: 1px solid #2a2a4e; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+  header h1 { font-size: 16px; font-weight: 700; color: #7c9fff; white-space: nowrap; }
+
+  .controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  select, input[type=range] { background: #252540; border: 1px solid #3a3a5e; color: #e0e0e0; border-radius: 6px; padding: 4px 8px; font-size: 13px; }
+  button { padding: 6px 14px; border: none; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all .15s; }
+  .btn-gen  { background: #3a3a6e; color: #aac; }
+  .btn-gen:hover { background: #4a4a8e; }
+  .btn-run  { background: #2d6a3f; color: #9f9; }
+  .btn-run:hover { background: #3d8a5f; }
+  .btn-stop { background: #6a2d2d; color: #f99; }
+  .btn-stop:hover { background: #8a3d3d; }
+  .btn-upload { background: #5a3a6e; color: #daf; }
+  .btn-upload:hover { background: #7a4a8e; }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+
+  label { font-size: 12px; color: #888; }
+  .speed-wrap { display: flex; align-items: center; gap: 6px; }
+
+  .main { display: flex; flex: 1; overflow: hidden; }
+
+  #canvas-wrap {
+    flex: 1; display: flex; align-items: center; justify-content: center;
+    padding: 12px; overflow: hidden;
+  }
+  canvas {
+    display: block;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+  }
+
+  .sidebar { width: 240px; background: #1a1a2e; border-left: 1px solid #2a2a4e; padding: 14px; display: flex; flex-direction: column; gap: 14px; overflow-y: auto; }
+
+  .stat-box { background: #252540; border-radius: 8px; padding: 10px 12px; }
+  .stat-box h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: #666; margin-bottom: 8px; }
+  .stat-row { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px; }
+  .stat-val { font-weight: 700; color: #7c9fff; }
+
+  .legend { display: flex; flex-direction: column; gap: 5px; }
+  .leg-item { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+  .leg-color { width: 16px; height: 16px; border-radius: 3px; flex-shrink: 0; }
+
+  .status-bar { padding: 5px 14px; font-size: 11px; color: #666; background: #1a1a2e; border-top: 1px solid #2a2a4e; }
+
+  .progress-bar { height: 3px; background: #252540; border-radius: 2px; margin-top: 6px; }
+  .progress-fill { height: 100%; border-radius: 2px; background: linear-gradient(90deg,#3a6fff,#7c9fff); transition: width .1s; }
+
+  #fileInput { display: none; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Akilli Labirent Cozucu</h1>
+  <div class="controls">
+    <label>Boyut</label>
+    <select id="sizeSelect">
+      <option value="21">21x21</option>
+      <option value="31">31x31</option>
+      <option value="41" selected>41x41</option>
+      <option value="61">61x61</option>
+      <option value="101">101x101</option>
+      <option value="151">151x151</option>
+    </select>
+    <button class="btn-gen" id="genBtn" onclick="generateMaze()">Yeni Labirent</button>
+    <button class="btn-upload" id="uploadBtn" onclick="document.getElementById('fileInput').click()">Gorsel Yukle</button>
+    <input type="file" id="fileInput" accept="image/png,image/jpeg" onchange="uploadImage(event)">
+  </div>
+  <div class="controls">
+    <label>Algoritma</label>
+    <select id="algoSelect">
+      <option value="bfs">BFS - Genislik Oncelikli</option>
+      <option value="dfs">DFS - Derinlik Oncelikli</option>
+      <option value="astar">A* - Manhattan</option>
+      <option value="greedy">Greedy Best-First</option>
+    </select>
+    <button class="btn-run" id="runBtn" onclick="startSolve()">Coz</button>
+    <button class="btn-stop" id="stopBtn" onclick="stopSolve()" disabled>Durdur</button>
+  </div>
+  <div class="controls speed-wrap">
+    <label>Hiz</label>
+    <input type="range" id="speedRange" min="1" max="1000" value="5">
+    <span id="speedLabel" style="font-size:12px;color:#888">5/fr</span>
+  </div>
+</header>
+
+<div class="main">
+  <div id="canvas-wrap"><canvas id="c"></canvas></div>
+
+  <div class="sidebar">
+    <div class="stat-box">
+      <h3>Istatistikler</h3>
+      <div class="stat-row"><span>Labirent</span><span class="stat-val" id="s-size">-</span></div>
+      <div class="stat-row"><span>Ziyaret</span><span class="stat-val" id="s-visited">0</span></div>
+      <div class="stat-row"><span>Yol Uzunlugu (hucre)</span><span class="stat-val" id="s-path">-</span></div>
+      <div class="stat-row"><span>Sure</span><span class="stat-val" id="s-time">-</span></div>
+      <div class="stat-row"><span>Sira Uzunlugu</span><span class="stat-val" id="s-queue">0</span></div>
+      <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+    </div>
+
+    <div class="stat-box">
+      <h3>Renk Aciklamalari</h3>
+      <div class="legend">
+        <div class="leg-item"><div class="leg-color" style="background:#1e1e2e"></div>Duvar</div>
+        <div class="leg-item"><div class="leg-color" style="background:#f5f5f5"></div>Yol</div>
+        <div class="leg-item"><div class="leg-color" style="background:#3a5fff"></div>Ziyaret Edilen</div>
+        <div class="leg-item"><div class="leg-color" style="background:#ffd700"></div>Acik Liste (Frontier)</div>
+        <div class="leg-item"><div class="leg-color" style="background:#00e676"></div>Cozum Yolu</div>
+        <div class="leg-item"><div class="leg-color" style="background:#ff4444"></div>Baslangic</div>
+        <div class="leg-item"><div class="leg-color" style="background:#ff9800"></div>Bitis</div>
+      </div>
+    </div>
+
+    <div class="stat-box">
+      <h3>Algoritma Bilgisi</h3>
+      <div id="algoInfo" style="font-size:12px;color:#aaa;line-height:1.6"></div>
+    </div>
+  </div>
+</div>
+
+<div class="status-bar" id="statusBar">Baslangic icin "Yeni Labirent" veya "Gorsel Yukle" secin.</div>
+
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+const ALGO_INFO = {
+  bfs:    'Genislik Oncelikli Arama (BFS), katman katman ilerler. Esit maliyetli adimlarda daima en kisa yolu bulur. Bellek kullanimi yuksektir.',
+  dfs:    'Derinlik Oncelikli Arama (DFS), bir dal boyunca sonuna kadar gider. En kisa yolu garantilemez. Bellek kullanimi dusuktur.',
+  astar:  'A* algoritmasi, g(n)+h(n) fonksiyonunu minimize eder. h(n)=Manhattan mesafesi. Kabul edilebilir sezgisel ile optimal cozum bulur.',
+  greedy: 'Greedy Best-First, yalnizca h(n) sezgiselini kullanir. Hedefe hizli yonelir ama optimal cozumu garantilemez.',
+};
+
+let maze = [], rows = 0, cols = 0;
+let mazeStart = [1, 1], mazeGoal = [0, 0];
+let cellSize = 14;
+let animHandle = null, solving = false;
+
+// ─── Maze Generation (Backend) ──────────────────────────────────────────────
+async function generateMaze() {
+  stopSolve();
+  const N = parseInt(document.getElementById('sizeSelect').value);
+  setStatus('Labirent uretiliyor...');
+
+  try {
+    const res = await fetch('/api/generate', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({size: N}),
+    });
+    const data = await res.json();
+    maze = data.grid;
+    rows = data.rows;
+    cols = data.cols;
+    mazeStart = data.start || [1, 1];
+    mazeGoal  = data.goal  || [rows - 2, cols - 2];
+    resetStats();
+    resizeCanvas();
+    drawMaze();
+    document.getElementById('s-size').textContent = rows + 'x' + cols;
+    setStatus('Labirent olusturuldu (' + rows + 'x' + cols + '). Algoritma secip "Coz"e basin.');
+  } catch (e) {
+    setStatus('Baglanti hatasi! Once "python app.py" calistirin.');
+  }
+}
+
+// ─── Image Upload ───────────────────────────────────────────────────────────
+async function uploadImage(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  event.target.value = '';
+  stopSolve();
+
+  setStatus('Gorsel yukleniyor ve isleniyor...');
+  const formData = new FormData();
+  formData.append('image', file);
+
+  try {
+    const res = await fetch('/api/upload', { method: 'POST', body: formData });
+    const data = await res.json();
+
+    if (data.error) { setStatus('Hata: ' + data.error); return; }
+
+    maze = data.grid;
+    rows = data.rows;
+    cols = data.cols;
+    mazeStart = data.start || [1, 1];
+    mazeGoal  = data.goal  || [rows - 2, cols - 2];
+
+    resetStats();
+    resizeCanvas();
+    drawMaze();
+    document.getElementById('s-size').textContent = rows + 'x' + cols;
+    const csInfo = data.cell_size > 1 ? ' (hucre=' + data.cell_size + ')' : '';
+    setStatus('Gorsel yuklendi: ' + rows + 'x' + cols + csInfo + '. Cozmeye hazir.');
+  } catch (e) {
+    setStatus('Baglanti hatasi! Once "python app.py" calistirin.');
+  }
+}
+
+// ─── Canvas Sizing ──────────────────────────────────────────────────────────
+function resizeCanvas() {
+  const wrap = document.getElementById('canvas-wrap');
+  const maxW = wrap.clientWidth - 24;
+  const maxH = wrap.clientHeight - 24;
+  cellSize = Math.max(1, Math.min(Math.floor(maxW / cols), Math.floor(maxH / rows)));
+  canvas.width  = cols * cellSize;
+  canvas.height = rows * cellSize;
+}
+
+// ─── Drawing ────────────────────────────────────────────────────────────────
+const CLR = {
+  wall:     '#1e1e2e',
+  path:     '#f0f0f0',
+  visited:  '#3a5fff',
+  frontier: '#ffd700',
+  solution: '#00e676',
+  start:    '#ff4444',
+  goal:     '#ff9800',
+};
+
+function drawCell(r, c, color) {
+  ctx.fillStyle = color;
+  ctx.fillRect(c * cellSize, r * cellSize, cellSize, cellSize);
+}
+
+function drawMaze() {
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      drawCell(r, c, maze[r][c] === 1 ? CLR.wall : CLR.path);
+    }
+  }
+  drawCell(mazeStart[0], mazeStart[1], CLR.start);
+  drawCell(mazeGoal[0],  mazeGoal[1],  CLR.goal);
+}
+
+// ─── Solve: Python backend cozum + JS animasyon ────────────────────────────
+async function startSolve() {
+  if (!maze.length) { setStatus('Once bir labirent olusturun veya yukleyin.'); return; }
+  stopSolve();
+
+  const algo = document.getElementById('algoSelect').value;
+  document.getElementById('algoInfo').textContent = ALGO_INFO[algo];
+  document.getElementById('runBtn').disabled = true;
+  document.getElementById('stopBtn').disabled = false;
+  setStatus('Python backend cozuyor...');
+
+  try {
+    const res = await fetch('/api/solve', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({grid: maze, algo, start: mazeStart, goal: mazeGoal}),
+    });
+    const data = await res.json();
+
+    if (!data.path) {
+      document.getElementById('runBtn').disabled = false;
+      document.getElementById('stopBtn').disabled = true;
+      setStatus('Cozum bulunamadi.');
+      return;
+    }
+
+    // Istatistikleri hemen goster
+    document.getElementById('s-visited').textContent = data.visited_count;
+    document.getElementById('s-path').textContent    = data.path_length + ' adim';
+    document.getElementById('s-time').textContent    = data.time_ms + ' ms';
+
+    // Animasyonu baslat
+    animateResult(data.visited_order, data.path, data);
+
+  } catch (e) {
+    document.getElementById('runBtn').disabled = false;
+    document.getElementById('stopBtn').disabled = true;
+    setStatus('Baglanti hatasi! Once "python app.py" calistirin.');
+  }
+}
+
+function animateResult(visitedOrder, path, stats) {
+  solving = true;
+  drawMaze();  // Temiz labirent
+
+  const totalVisited = visitedOrder.length;
+  const totalPath = path.length;
+  let vi = 0;  // visited index
+  let pi = 0;  // path index
+  let phase = 'visiting';  // 'visiting' → 'path' → 'done'
+
+  function step() {
+    if (!solving) return;
+
+    const stepsPerFrame = parseInt(document.getElementById('speedRange').value);
+
+    if (phase === 'visiting') {
+      // Her frame'de stepsPerFrame kadar ziyaret hucresini boya
+      const end = Math.min(vi + stepsPerFrame, totalVisited);
+      for (let i = vi; i < end; i++) {
+        const [r, c] = visitedOrder[i];
+        // Baslangic ve bitis uzerini boyama
+        if (r === mazeStart[0] && c === mazeStart[1]) continue;
+        if (r === mazeGoal[0]  && c === mazeGoal[1])  continue;
+        drawCell(r, c, CLR.visited);
+      }
+      vi = end;
+
+      // Ilerleme cubugu ve durum
+      const pct = (vi / totalVisited * 100).toFixed(1);
+      document.getElementById('progressFill').style.width = pct + '%';
+      document.getElementById('s-queue').textContent = (totalVisited - vi);
+      setStatus('Ziyaret ediliyor: ' + vi + ' / ' + totalVisited + ' dugum');
+
+      if (vi >= totalVisited) {
+        phase = 'path';
+      }
+      animHandle = requestAnimationFrame(step);
+
+    } else if (phase === 'path') {
+      // Cozum yolunu adim adim ciz
+      const end = Math.min(pi + Math.max(1, Math.floor(stepsPerFrame / 2)), totalPath);
+      for (let i = pi; i < end; i++) {
+        const [r, c] = path[i];
+        if (r === mazeStart[0] && c === mazeStart[1]) continue;
+        if (r === mazeGoal[0]  && c === mazeGoal[1])  continue;
+        drawCell(r, c, CLR.solution);
+      }
+      pi = end;
+
+      setStatus('Yol ciziliyor: ' + pi + ' / ' + totalPath);
+
+      if (pi >= totalPath) {
+        phase = 'done';
+        // Baslangic ve bitisi tekrar uzerine boya
+        drawCell(mazeStart[0], mazeStart[1], CLR.start);
+        drawCell(mazeGoal[0],  mazeGoal[1],  CLR.goal);
+        finishSolve(stats);
+      } else {
+        animHandle = requestAnimationFrame(step);
+      }
+    }
+  }
+  animHandle = requestAnimationFrame(step);
+}
+
+function finishSolve(stats) {
+  solving = false;
+  document.getElementById('runBtn').disabled = false;
+  document.getElementById('stopBtn').disabled = true;
+  document.getElementById('progressFill').style.width = '100%';
+  document.getElementById('s-queue').textContent = '0';
+  setStatus('Tamamlandi! Yol: ' + stats.path_length + ' adim | Ziyaret: ' +
+            stats.visited_count + ' | Python suresi: ' + stats.time_ms + 'ms');
+}
+
+function stopSolve() {
+  solving = false;
+  if (animHandle) cancelAnimationFrame(animHandle);
+  document.getElementById('runBtn').disabled = false;
+  document.getElementById('stopBtn').disabled = true;
+}
+
+function resetStats() {
+  ['s-visited','s-queue'].forEach(id => { document.getElementById(id).textContent = '0'; });
+  ['s-path','s-time'].forEach(id => { document.getElementById(id).textContent = '-'; });
+  document.getElementById('progressFill').style.width = '0%';
+}
+
+function setStatus(msg) { document.getElementById('statusBar').textContent = msg; }
+
+// Speed label
+document.getElementById('speedRange').addEventListener('input', e => {
+  document.getElementById('speedLabel').textContent = e.target.value + '/fr';
+});
+
+// Algo info on change
+document.getElementById('algoSelect').addEventListener('change', e => {
+  document.getElementById('algoInfo').textContent = ALGO_INFO[e.target.value];
+});
+
+// Init
+window.addEventListener('load', () => {
+  document.getElementById('algoInfo').textContent = ALGO_INFO['bfs'];
+  generateMaze();
+});
+
+window.addEventListener('resize', () => {
+  if (maze.length) { resizeCanvas(); drawMaze(); }
+});
+</script>
+</body>
+</html>
