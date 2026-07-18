@@ -1,5 +1,5 @@
 # YAP 441 — Akıllı Labirent Çözücü
-**Nurefşan Olfaz — 211301008**
+**Nurefşan Olfaz**
 
 ## Kurulum
 
